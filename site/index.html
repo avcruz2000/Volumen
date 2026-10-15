@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Volumen — Flujo de liquidez global</title>
+  <meta name="description" content="Hacia dónde se mueve la liquidez de los mercados mundiales, en tiempo casi real." />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%232a78d6'/><rect x='6' y='16' width='4' height='10' rx='1' fill='white'/><rect x='14' y='9' width='4' height='17' rx='1' fill='white'/><rect x='22' y='5' width='4' height='21' rx='1' fill='white'/></svg>" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7" fill="var(--accent)"/><rect x="6" y="16" width="4" height="10" rx="1" fill="#fff"/><rect x="14" y="9" width="4" height="17" rx="1" fill="#fff"/><rect x="22" y="5" width="4" height="21" rx="1" fill="#fff"/></svg>
+      <div>
+        <h1>Volumen</h1>
+        <p class="sub">Hacia dónde se mueve la liquidez mundial</p>
+      </div>
+    </div>
+    <div class="status">
+      <span class="live"><span class="dot" id="liveDot"></span><span id="liveText">Conectando…</span></span>
+      <span class="muted" id="updated">—</span>
+      <button class="icon-btn" id="themeBtn" aria-label="Cambiar tema" title="Cambiar tema">◐</button>
+    </div>
+  </header>
+
+  <div class="ticker" id="ticker" aria-label="Cripto en vivo"></div>
+
+  <main>
+    <section class="tiles" id="tiles"></section>
+
+    <section class="card narrative">
+      <h2>Lectura del momento</h2>
+      <ul id="narrative"><li class="muted">Cargando datos…</li></ul>
+    </section>
+
+    <section class="grid-2">
+      <div class="card">
+        <div class="card-head">
+          <h2>Hacia dónde entra el dinero</h2>
+          <span class="hint">Top 10 · puntuación de flujo</span>
+        </div>
+        <div id="inflows" class="chart"></div>
+      </div>
+      <div class="card">
+        <div class="card-head">
+          <h2>De dónde sale el dinero</h2>
+          <span class="hint">Top 10 · puntuación de flujo</span>
+        </div>
+        <div id="outflows" class="chart"></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h2>Mapa de flujos por país</h2>
+        <div class="legend-div" aria-hidden="true"><span>Salida</span><i class="ramp"></i><span>Entrada</span></div>
+      </div>
+      <div id="map" class="map"></div>
+    </section>
+
+    <section class="card">
+      <div class="card-head wrap">
+        <h2>Flujos por grupo</h2>
+        <div class="controls">
+          <div class="seg" role="tablist" id="groupTabs"></div>
+          <button class="ghost" id="tableToggle">Ver tabla</button>
+        </div>
+      </div>
+      <div id="groupChart" class="chart"></div>
+      <div id="groupTable" class="table-wrap" hidden></div>
+    </section>
+
+    <section class="grid-2">
+      <div class="card">
+        <div class="card-head">
+          <h2>Liquidez neta de la Fed</h2>
+          <span class="hint">Balance − TGA − RRP · billones USD</span>
+        </div>
+        <div id="fedChart" class="chart line"></div>
+      </div>
+      <div class="card">
+        <div class="card-head">
+          <h2>Oferta de stablecoins</h2>
+          <span class="hint">Liquidez lista para cripto · mil M USD</span>
+        </div>
+        <div id="stableChart" class="chart line"></div>
+      </div>
+    </section>
+
+    <section class="grid-2">
+      <div class="card">
+        <div class="card-head">
+          <h2>Régimen de riesgo</h2>
+          <span class="hint">Historial · −100 refugio … +100 riesgo</span>
+        </div>
+        <div id="regimeChart" class="chart line"></div>
+      </div>
+      <div class="card">
+        <div class="card-head">
+          <h2>Macro y divisas</h2>
+          <span class="hint">Precio · variación</span>
+        </div>
+        <div id="macro" class="table-wrap"></div>
+      </div>
+    </section>
+
+    <section class="card about">
+      <h2>Cómo se calcula</h2>
+      <p>La <b>puntuación de flujo</b> (−100 a +100) combina el flujo neto de dinero de 5 sesiones (volumen en USD ponderado por dónde cierra cada vela dentro de su rango), el <b>Chaikin Money Flow</b> de 20 sesiones, el <b>volumen relativo</b> frente a su media y el momentum de 5 días. Valores positivos indican acumulación (entra liquidez); negativos, distribución (sale liquidez). Los ETFs cotizados en EE.UU. permiten comparar el volumen de todos los países en una misma moneda.</p>
+      <p><b>Fuentes:</b> Yahoo Finance (precios y volumen), FRED / Reserva Federal (balance, TGA, repos inversos, M2), CoinGecko (mercado cripto), DefiLlama (stablecoins), alternative.me (miedo y codicia), Coinbase (precios cripto en vivo).</p>
+      <p><b>Úsalo desde Claude:</b> este panel es la cara visible del servidor MCP <a href="https://github.com/avcruz2000/Volumen">Volumen</a>. Instrucciones de conexión en el repositorio.</p>
+      <p class="muted small">Información educativa, no es asesoramiento financiero. Los datos pueden tener retrasos de hasta 15 minutos según la fuente.</p>
+    </section>
+  </main>
+
+  <div class="tooltip" id="tip" role="tooltip" hidden></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
