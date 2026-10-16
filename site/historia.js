@@ -59,6 +59,12 @@
     tip.style.left = `${Math.max(8, x)}px`; tip.style.top = `${Math.max(8, y)}px`;
   }
   const hideTip = () => (tip.hidden = true);
+  /** X del puntero en coordenadas del viewBox del SVG, sin depender de getScreenCTM (falla en Safari / con zoom). */
+  function svgX(e, W) {
+    const svgEl = e.currentTarget.ownerSVGElement || e.currentTarget;
+    const r = svgEl.getBoundingClientRect();
+    return ((e.clientX - r.left) / r.width) * W;
+  }
 
   function divColor(v) {
     if (v == null) return null;
@@ -289,7 +295,7 @@
     svg.append("rect").attr("x", 0).attr("y", m.t).attr("width", W).attr("height", H - m.t - m.b).attr("fill", "transparent")
       .on("mousemove", (e) => {
         lastEvt = e;
-        const d = x.invert(Math.max(m.l, Math.min(W - m.r, d3.pointer(e)[0])));
+        const d = x.invert(Math.max(m.l, Math.min(W - m.r, svgX(e, W))));
         showAt(d3.bisector((t) => t).center(pDates, d), e);
       })
       .on("mouseleave", () => { lastEvt = null; cross.style("display", "none"); dots.forEach((d) => d.style("display", "none")); hideTip(); });
@@ -348,7 +354,7 @@
     svg.append("line").attr("class", "zero").attr("x1", m.l).attr("x2", W - m.r).attr("y1", y(0)).attr("y2", y(0));
     svg.append("rect").attr("x", 0).attr("y", m.t).attr("width", W).attr("height", H - m.t - m.b).attr("fill", "transparent")
       .on("mousemove", (e) => {
-        const i = Math.max(0, Math.min(pts.length - 1, Math.floor((d3.pointer(e)[0] - m.l) / x.step())));
+        const i = Math.max(0, Math.min(pts.length - 1, Math.floor((svgX(e, W) - m.l) / x.step())));
         const p = pts[i];
         showTip(e, `<div class="t">${fmtPeriod(p.p)}</div>${kv("Riesgo − refugio", `${p.v > 0 ? "+" : ""}${p.v.toFixed(1)}`)}<div class="muted small">${p.v > 0 ? "El dinero buscó riesgo" : "El dinero buscó refugio"}</div>`);
       })
@@ -377,7 +383,7 @@
     const bis = d3.bisector((p) => p.d).center;
     svg.append("rect").attr("x", 0).attr("y", m.t).attr("width", W).attr("height", H - m.t - m.b).attr("fill", "transparent")
       .on("mousemove", (e) => {
-        const p = pts[bis(pts, x.invert(Math.max(m.l, Math.min(W - m.r, d3.pointer(e)[0]))))];
+        const p = pts[bis(pts, x.invert(Math.max(m.l, Math.min(W - m.r, svgX(e, W)))))];
         cross.style("display", null).attr("x1", x(p.d)).attr("x2", x(p.d));
         dot.style("display", null).attr("cx", x(p.d)).attr("cy", y(p.v));
         showTip(e, `<div class="t">${p.d.toLocaleDateString("es", { timeZone: "UTC", year: "numeric", month: "short", day: p.day ? "numeric" : undefined })}</div>${kv("Valor", tipFmt(p.v))}`);

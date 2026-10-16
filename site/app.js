@@ -62,6 +62,12 @@
     tip.style.top = `${Math.max(8, y)}px`;
   }
   const hideTip = () => (tip.hidden = true);
+  /** X del puntero en coordenadas del viewBox del SVG, sin depender de getScreenCTM (falla en Safari / con zoom). */
+  function svgX(e, W) {
+    const svgEl = e.currentTarget.ownerSVGElement || e.currentTarget;
+    const r = svgEl.getBoundingClientRect();
+    return ((e.clientX - r.left) / r.width) * W;
+  }
   const kv = (k, v) => `<div class="kv"><span>${k}</span><b>${v}</b></div>`;
   const instTip = (d) =>
     `<div class="t">${esc(d.name)} <span class="muted">${esc(d.symbol)}</span></div>` +
@@ -257,7 +263,7 @@
     const bis = d3.bisector((p) => p.d).center;
     svg.append("rect").attr("x", 0).attr("y", m.t).attr("width", W).attr("height", H - m.t - m.b).attr("fill", "transparent")
       .on("mousemove", (e) => {
-        const mx = Math.max(m.l, Math.min(W - m.r, d3.pointer(e)[0]));
+        const mx = Math.max(m.l, Math.min(W - m.r, svgX(e, W)));
         const p = points[bis(points, x.invert(mx))];
         cross.style("display", null).attr("x1", x(p.d)).attr("x2", x(p.d));
         dot.style("display", null).attr("cx", x(p.d)).attr("cy", y(p.v));
