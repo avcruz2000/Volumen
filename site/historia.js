@@ -214,6 +214,8 @@
   }
 
   /* ---------- flujo acumulado ---------- */
+  let cumKeys = null;
+  addEventListener("keydown", (e) => cumKeys?.(e));
   function renderCum() {
     const node = $("#cumChart");
     const { periods, rows } = view;
@@ -265,22 +267,37 @@
     const cross = svg.append("line").attr("class", "crosshair").attr("y1", m.t).attr("y2", H - m.b).style("display", "none");
     const dots = series.map((s) => svg.append("circle").attr("r", 4).attr("fill", slotColor(s.slot)).attr("stroke", css("--surface")).attr("stroke-width", 2).style("display", "none"));
     const bis = d3.bisector((p) => p.d).center;
-    svg.append("rect").attr("x", m.l).attr("y", m.t).attr("width", W - m.l - m.r).attr("height", H - m.t - m.b).attr("fill", "transparent")
+    // La zona activa cubre todo el ancho (incluidas las etiquetas): más allá del último dato se fija en el último periodo.
+    const pDates = periods.map(toDate);
+    let cur = -1, lastEvt = null;
+    const showAt = (idx, e) => {
+      cur = Math.max(0, Math.min(pDates.length - 1, idx));
+      const d = pDates[cur];
+      let html = "", px = null;
+      series.forEach((s, k) => {
+        const p = s.pts[bis(s.pts, d)];
+        if (!p) return;
+        px ??= p;
+        dots[k].style("display", null).attr("cx", x(p.d)).attr("cy", y(p.v));
+        html += `<div class="kv"><span><i class="swatch" style="background:${slotColor(s.slot)}"></i>${esc(s.row.name)}</span><b>${state.cum === "usd" ? fmtM(p.v * 1000) : p.v.toFixed(1)}</b></div>`;
+      });
+      if (!px) return;
+      cross.style("display", null).attr("x1", x(px.d)).attr("x2", x(px.d));
+      showTip(e, `<div class="t">${fmtPeriod(px.p)}</div>${html}<div class="muted small" style="margin-top:4px">← → para moverte por periodo</div>`);
+    };
+    // La zona activa cubre todo el ancho (incluidas las etiquetas): más allá del último dato se fija en el último periodo.
+    svg.append("rect").attr("x", 0).attr("y", m.t).attr("width", W).attr("height", H - m.t - m.b).attr("fill", "transparent")
       .on("mousemove", (e) => {
-        const d = x.invert(d3.pointer(e)[0]);
-        let html = "", px = null;
-        series.forEach((s, k) => {
-          const p = s.pts[bis(s.pts, d)];
-          if (!p) return;
-          px ??= p;
-          dots[k].style("display", null).attr("cx", x(p.d)).attr("cy", y(p.v));
-          html += `<div class="kv"><span><i class="swatch" style="background:${slotColor(s.slot)}"></i>${esc(s.row.name)}</span><b>${state.cum === "usd" ? fmtM(p.v * 1000) : p.v.toFixed(1)}</b></div>`;
-        });
-        if (!px) return;
-        cross.style("display", null).attr("x1", x(px.d)).attr("x2", x(px.d));
-        showTip(e, `<div class="t">${fmtPeriod(px.p)}</div>${html}`);
+        lastEvt = e;
+        const d = x.invert(Math.max(m.l, Math.min(W - m.r, d3.pointer(e)[0])));
+        showAt(d3.bisector((t) => t).center(pDates, d), e);
       })
-      .on("mouseleave", () => { cross.style("display", "none"); dots.forEach((d) => d.style("display", "none")); hideTip(); });
+      .on("mouseleave", () => { lastEvt = null; cross.style("display", "none"); dots.forEach((d) => d.style("display", "none")); hideTip(); });
+    cumKeys = (e) => {
+      if (!lastEvt || cur < 0 || (e.key !== "ArrowLeft" && e.key !== "ArrowRight")) return;
+      e.preventDefault();
+      showAt(cur + (e.key === "ArrowRight" ? 1 : -1), lastEvt);
+    };
     svg.append("text").attr("x", m.l).attr("y", 8).style("fill", css("--muted")).style("font-size", "11px")
       .text(state.cum === "usd" ? "Miles de millones USD" : "Flujo acumulado ÷ volumen acumulado × 100");
   }
@@ -329,7 +346,7 @@
       .attr("y", (p) => y(Math.max(0, p.v))).attr("height", (p) => Math.abs(y(p.v) - y(0)))
       .attr("fill", (p) => (p.v >= 0 ? css("--in") : css("--out")));
     svg.append("line").attr("class", "zero").attr("x1", m.l).attr("x2", W - m.r).attr("y1", y(0)).attr("y2", y(0));
-    svg.append("rect").attr("x", m.l).attr("y", m.t).attr("width", W - m.l - m.r).attr("height", H - m.t - m.b).attr("fill", "transparent")
+    svg.append("rect").attr("x", 0).attr("y", m.t).attr("width", W).attr("height", H - m.t - m.b).attr("fill", "transparent")
       .on("mousemove", (e) => {
         const i = Math.max(0, Math.min(pts.length - 1, Math.floor((d3.pointer(e)[0] - m.l) / x.step())));
         const p = pts[i];
@@ -358,12 +375,12 @@
     const cross = svg.append("line").attr("class", "crosshair").attr("y1", m.t).attr("y2", H - m.b).style("display", "none");
     const dot = svg.append("circle").attr("class", "focus-dot").attr("r", 4).style("display", "none");
     const bis = d3.bisector((p) => p.d).center;
-    svg.append("rect").attr("x", m.l).attr("y", m.t).attr("width", W - m.l - m.r).attr("height", H - m.t - m.b).attr("fill", "transparent")
+    svg.append("rect").attr("x", 0).attr("y", m.t).attr("width", W).attr("height", H - m.t - m.b).attr("fill", "transparent")
       .on("mousemove", (e) => {
-        const p = pts[bis(pts, x.invert(d3.pointer(e)[0]))];
+        const p = pts[bis(pts, x.invert(Math.max(m.l, Math.min(W - m.r, d3.pointer(e)[0]))))];
         cross.style("display", null).attr("x1", x(p.d)).attr("x2", x(p.d));
         dot.style("display", null).attr("cx", x(p.d)).attr("cy", y(p.v));
-        showTip(e, `<div class="t">${p.d.toLocaleDateString("es", { year: "numeric", month: "short", day: p.day ? "numeric" : undefined })}</div>${kv("Valor", tipFmt(p.v))}`);
+        showTip(e, `<div class="t">${p.d.toLocaleDateString("es", { timeZone: "UTC", year: "numeric", month: "short", day: p.day ? "numeric" : undefined })}</div>${kv("Valor", tipFmt(p.v))}`);
       })
       .on("mouseleave", () => { cross.style("display", "none"); dot.style("display", "none"); hideTip(); });
   }

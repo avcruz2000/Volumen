@@ -255,9 +255,9 @@
     const cross = svg.append("line").attr("class", "crosshair").attr("y1", m.t).attr("y2", H - m.b).style("display", "none");
     const dot = svg.append("circle").attr("class", "focus-dot").attr("r", 5).style("display", "none");
     const bis = d3.bisector((p) => p.d).center;
-    svg.append("rect").attr("x", m.l).attr("y", m.t).attr("width", W - m.l - m.r).attr("height", H - m.t - m.b).attr("fill", "transparent")
+    svg.append("rect").attr("x", 0).attr("y", m.t).attr("width", W).attr("height", H - m.t - m.b).attr("fill", "transparent")
       .on("mousemove", (e) => {
-        const [mx] = d3.pointer(e);
+        const mx = Math.max(m.l, Math.min(W - m.r, d3.pointer(e)[0]));
         const p = points[bis(points, x.invert(mx))];
         cross.style("display", null).attr("x1", x(p.d)).attr("x2", x(p.d));
         dot.style("display", null).attr("cx", x(p.d)).attr("cy", y(p.v));
