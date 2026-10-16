@@ -1,4 +1,5 @@
 import type { Bar, Point, Series } from "./sources.js";
+import type { TvData } from "./tradingview.js";
 
 export interface FlowMetrics {
   symbol: string;
@@ -22,6 +23,28 @@ export interface FlowMetrics {
   flowScore: number;
   signal: "Entrada fuerte" | "Entrada" | "Neutral" | "Salida" | "Salida fuerte";
   asOf: string;
+  /** Puntuación solo con el modelo de volumen (antes de mezclar TradingView) */
+  volumeScore?: number;
+  /** Datos de TradingView: calificación técnica, RSI, volumen relativo intradía… */
+  tv?: TvData;
+  /** ¿TradingView confirma la dirección del flujo? */
+  tvConfirms?: boolean;
+}
+
+/** Peso de la calificación técnica de TradingView en la puntuación final. */
+export const TV_WEIGHT = 0.15;
+
+/** Mezcla la calificación técnica de TradingView (−1…+1) en la puntuación de flujo. */
+export function blendTradingView(f: FlowMetrics, tv: TvData | undefined): FlowMetrics {
+  if (!tv) return f;
+  const out: FlowMetrics = { ...f, tv, volumeScore: f.flowScore };
+  if (tv.rating != null) {
+    const score = Math.max(-100, Math.min(100, (1 - TV_WEIGHT) * f.flowScore + TV_WEIGHT * tv.rating * 100));
+    out.flowScore = Math.round(score * 10) / 10;
+    out.signal = signalOf(score);
+    out.tvConfirms = Math.abs(f.flowScore) < 15 || Math.abs(tv.rating) < 0.1 ? undefined : Math.sign(f.flowScore) === Math.sign(tv.rating);
+  }
+  return out;
 }
 
 const pct = (a: number, b: number) => (b ? ((a - b) / b) * 100 : 0);

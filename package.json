@@ -1,6 +1,6 @@
 {
   "name": "volumen-mcp",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "MCP que analiza en tiempo real hacia dónde fluye la liquidez de los mercados mundiales",
   "main": "dist/src/index.js",
   "scripts": {

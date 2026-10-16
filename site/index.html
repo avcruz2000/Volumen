@@ -73,6 +73,31 @@
       <div id="groupTable" class="table-wrap" hidden></div>
     </section>
 
+    <section class="grid-2" id="tvSection" hidden>
+      <div class="card">
+        <div class="card-head">
+          <h2>Flujo intradía por sector</h2>
+          <span class="hint">TradingView · acciones EE.UU. &gt; 10.000 M</span>
+        </div>
+        <div id="breadthChart" class="chart"></div>
+      </div>
+      <div class="card">
+        <div class="card-head wrap">
+          <h2>Volumen inusual ahora</h2>
+          <div class="controls"><span class="hint">TradingView</span><div class="seg" role="tablist" id="unusualTabs"></div></div>
+        </div>
+        <div id="unusual" class="table-wrap"></div>
+      </div>
+    </section>
+
+    <section class="card" id="chartCard">
+      <div class="card-head">
+        <h2>Gráfico · <span id="chartTitle">S&amp;P 500</span></h2>
+        <span class="hint">TradingView · haz clic en cualquier activo del panel para verlo aquí</span>
+      </div>
+      <div id="tvChart" class="tv-chart"></div>
+    </section>
+
     <section class="grid-2">
       <div class="card">
         <div class="card-head">
@@ -110,7 +135,8 @@
     <section class="card about">
       <h2>Cómo se calcula</h2>
       <p>La <b>puntuación de flujo</b> (−100 a +100) combina el flujo neto de dinero de 5 sesiones (volumen en USD ponderado por dónde cierra cada vela dentro de su rango), el <b>Chaikin Money Flow</b> de 20 sesiones, el <b>volumen relativo</b> frente a su media y el momentum de 5 días. Valores positivos indican acumulación (entra liquidez); negativos, distribución (sale liquidez). Los ETFs cotizados en EE.UU. permiten comparar el volumen de todos los países en una misma moneda.</p>
-      <p><b>Fuentes:</b> Yahoo Finance (precios y volumen), FRED / Reserva Federal (balance, TGA, repos inversos, M2), CoinGecko (mercado cripto), DefiLlama (stablecoins), alternative.me (miedo y codicia), Coinbase (precios cripto en vivo).</p>
+      <p>La calificación técnica de <b>TradingView</b> (medias móviles + osciladores, de −1 a +1) pondera un 15% en la puntuación final y sirve como confirmación: si coincide con la dirección del flujo de volumen, la señal es más fiable.</p>
+      <p><b>Fuentes:</b> Yahoo Finance (precios y volumen), TradingView (análisis técnico, volumen inusual, amplitud sectorial y gráficos), FRED / Reserva Federal (balance, TGA, repos inversos, M2), CoinGecko (mercado cripto), DefiLlama (stablecoins), alternative.me (miedo y codicia), Coinbase (precios cripto en vivo).</p>
       <p><b>Úsalo desde Claude:</b> este panel es la cara visible del servidor MCP <a href="https://github.com/avcruz2000/Volumen">Volumen</a>. Instrucciones de conexión en el repositorio.</p>
       <p class="muted small">Información educativa, no es asesoramiento financiero. Los datos pueden tener retrasos de hasta 15 minutos según la fuente.</p>
     </section>

@@ -182,3 +182,9 @@ tr:last-child td { border-bottom: 0; }
   .tile .val { font-size: 22px; }
   .card-head { flex-wrap: wrap; }
 }
+
+.tv-sep { margin: 6px 0 2px; padding-top: 6px; border-top: 1px solid var(--border); font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+tr.clickable { cursor: pointer; }
+tr.clickable:hover td { background: var(--surface-2); }
+.tv-chart { height: 520px; border-radius: 10px; overflow: hidden; }
+@media (max-width: 600px) { .tv-chart { height: 380px; } }

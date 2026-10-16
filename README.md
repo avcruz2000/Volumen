@@ -20,18 +20,24 @@ ecosistema cripto para responder una pregunta: *¿hacia dónde está yendo el di
 | **Liquidez de la Fed** | Balance (WALCL) − Cuenta del Tesoro (TGA) − Repos inversos (RRP), M2 | FRED |
 | **Liquidez cripto** | Capitalización, dominancia BTC, oferta de stablecoins, miedo y codicia | CoinGecko, DefiLlama, alternative.me |
 | **Macro y divisas** | VIX, rendimientos del Tesoro, DXY, EUR, JPY, CNY, MXN, oro, petróleo, cobre | Yahoo Finance |
-| **En vivo (dashboard)** | Precios cripto tick a tick | Coinbase WebSocket |
+| **Análisis técnico** | Calificación técnica (medias + osciladores), RSI, volumen relativo intradía de cada instrumento | TradingView |
+| **Volumen inusual** | Activos con volumen relativo anómalo ahora mismo (EE.UU., cripto y 24 mercados locales) | TradingView |
+| **Amplitud sectorial** | Flujo neto intradía y % al alza por sector, recorriendo todas las acciones de EE.UU. > 10.000 M | TradingView |
+| **En vivo (dashboard)** | Precios cripto tick a tick · gráfico interactivo de TradingView | Coinbase WebSocket · TradingView |
 
-Todas las fuentes son **públicas y gratuitas, sin API keys**.
+Todas las fuentes son **públicas y gratuitas, sin API keys**. TradingView se consulta mediante su scanner público (no oficial): puede cambiar sin aviso, por eso Volumen sigue funcionando aunque falle.
 
 ### Puntuación de flujo
 
 ```
 flujo_5d   = Σ (posición del cierre en el rango de la vela × precio × volumen)   ← "money-flow volume"
-puntuación = 40% · tanh(flujo_5d / volumen_medio_diario)  × √volumen_relativo
+modelo_vol = 40% · tanh(flujo_5d / volumen_medio_diario)  × √volumen_relativo
            + 30% · tanh(CMF20 × 5)
            + 30% · tanh(cambio_5d / 4%)
+puntuación = 85% · modelo_vol + 15% · calificación_técnica_TradingView × 100
 ```
+
+Además se indica si TradingView **confirma** la dirección del flujo de volumen o **diverge** de ella.
 
 Positivo = acumulación (entra liquidez). Negativo = distribución (sale liquidez). Durante la sesión,
 el volumen del día se proyecta a sesión completa para no infravalorar el flujo intradía.
@@ -116,6 +122,9 @@ como conector remoto en Claude.
 | `get_risk_regime` | Régimen risk-on / risk-off y sus componentes |
 | `get_fed_liquidity` | Liquidez neta de la Reserva Federal con historial |
 | `get_crypto_liquidity` | Capitalización, dominancia, stablecoins, miedo y codicia |
+| `tradingview_technicals` | Calificación técnica, RSI, volumen relativo y rendimiento de cualquier símbolo (SPY, BTC-USD, BMV:WALMEX, TVC:DXY…) |
+| `tradingview_unusual_volume` | Screener de volumen inusual en EE.UU., cripto o mercados locales (México, Brasil, Japón, India…) |
+| `tradingview_sector_breadth` | Flujo neto intradía y amplitud por sector con todas las grandes acciones de EE.UU. |
 
 Recurso: `volumen://snapshot` · Prompt: `informe_liquidez`.
 
@@ -124,6 +133,8 @@ Ejemplos de preguntas a Claude:
 - *"¿Qué países están recibiendo más flujo esta semana?"*
 - *"Compara el flujo de oro, bonos largos, Nasdaq y Bitcoin."*
 - *"¿La Fed está inyectando o drenando liquidez?"*
+- *"¿Qué acciones mexicanas tienen volumen inusual hoy?"*
+- *"¿TradingView confirma el flujo hacia el oro?"*
 
 ## Desarrollo
 

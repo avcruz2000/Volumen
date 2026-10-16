@@ -27,6 +27,7 @@
     document.documentElement.dataset.theme = next;
     try { localStorage.setItem("volumen-theme", next); } catch {}
     renderAll();
+    renderChart();
   });
 
   /* ---------- formato ---------- */
@@ -71,6 +72,14 @@
     kv("Cambio 1m", fmtPct(d.chg1m)) +
     (d.avgDollarVolume20 > 0
       ? kv("Volumen relativo", `${d.relVolume.toFixed(2)}×`) + kv("Flujo neto 5d", fmtUsd(d.netFlow5d)) + kv("CMF 20", d.cmf20.toFixed(3))
+      : "") +
+    (d.tv
+      ? `<div class="tv-sep">TradingView</div>` +
+        kv("Técnico", `${d.tv.ratingLabel}${d.tv.rating != null ? ` (${d.tv.rating.toFixed(2)})` : ""}`) +
+        (d.tv.rsi != null ? kv("RSI", d.tv.rsi.toFixed(1)) : "") +
+        (d.tv.relVolume10d != null ? kv("Vol. relativo 10d", `${d.tv.relVolume10d.toFixed(2)}×`) : "") +
+        (d.tvConfirms != null ? kv("¿Confirma el flujo?", d.tvConfirms ? "Sí" : "No, diverge") : "") +
+        `<div class="muted small" style="margin-top:4px">Clic para ver el gráfico</div>`
       : "");
 
   /* ---------- tiles ---------- */
@@ -109,7 +118,7 @@
   }
 
   /* ---------- barras divergentes ---------- */
-  function barChart(el, data, { fixedDomain = 100 } = {}) {
+  function barChart(el, data, { fixedDomain = 100, tipFn = instTip, onClick = (d) => d.tv && openChart(d.tv.ticker, d.name) } = {}) {
     const node = typeof el === "string" ? $(el) : el;
     node.innerHTML = "";
     if (!data.length) return (node.innerHTML = '<p class="muted">Sin datos.</p>');
@@ -140,12 +149,14 @@
       .text((d) => `${d.flowScore > 0 ? "+" : ""}${Math.round(d.flowScore)}`);
     svg.append("line").attr("class", "zero").attr("x1", x(0)).attr("x2", x(0)).attr("y1", m.t).attr("y2", H - m.b);
     rows.append("rect").attr("class", "hit").attr("x", 0).attr("y", 0).attr("width", W).attr("height", rowH)
-      .on("mousemove", (e, d) => showTip(e, instTip(d))).on("mouseleave", hideTip);
+      .style("cursor", (d) => (onClick && d.tv ? "pointer" : "default"))
+      .on("mousemove", (e, d) => showTip(e, tipFn(d))).on("mouseleave", hideTip)
+      .on("click", (_, d) => onClick?.(d));
   }
 
   /* ---------- tabla de grupo ---------- */
   function groupTable(data) {
-    const rows = data.map((d) => `<tr>
+    const rows = data.map((d) => `<tr${d.tv ? ` class="clickable" data-tv="${esc(d.tv.ticker)}" data-name="${esc(d.name)}"` : ""}>
       <td>${esc(d.name)} <span class="muted">${esc(d.symbol)}</span></td>
       <td class="r num">${fmtPrice(d.price)}</td>
       <td class="r num ${cls(d.chg1d)}">${fmtPct(d.chg1d)}</td>
@@ -154,9 +165,11 @@
       <td class="r num">${d.avgDollarVolume20 > 0 ? d.relVolume.toFixed(2) + "×" : "—"}</td>
       <td class="r num ${cls(d.netFlow5d)}">${d.avgDollarVolume20 > 0 ? fmtUsd(d.netFlow5d) : "—"}</td>
       <td class="r num"><b>${d.flowScore > 0 ? "+" : ""}${d.flowScore.toFixed(1)}</b></td>
-      <td><span class="pill ${cls(d.flowScore >= 15 ? 1 : d.flowScore <= -15 ? -1 : 0)}">${d.signal}</span></td></tr>`).join("");
+      <td><span class="pill ${cls(d.flowScore >= 15 ? 1 : d.flowScore <= -15 ? -1 : 0)}">${d.signal}</span></td>
+      <td class="${cls(d.tv?.rating >= 0.1 ? 1 : d.tv?.rating <= -0.1 ? -1 : 0)}">${d.tv ? d.tv.ratingLabel : "—"}</td>
+      <td class="r num">${d.tv?.rsi != null ? d.tv.rsi.toFixed(0) : "—"}</td></tr>`).join("");
     return `<table><thead><tr><th>Instrumento</th><th class="r">Precio</th><th class="r">1d</th><th class="r">5d</th><th class="r">1m</th>
-      <th class="r">Vol. rel.</th><th class="r">Flujo 5d</th><th class="r">Puntuación</th><th>Señal</th></tr></thead><tbody>${rows}</tbody></table>`;
+      <th class="r">Vol. rel.</th><th class="r">Flujo 5d</th><th class="r">Puntuación</th><th>Señal</th><th>TradingView</th><th class="r">RSI</th></tr></thead><tbody>${rows}</tbody></table>`;
   }
 
   function renderGroups() {
@@ -203,6 +216,7 @@
       .attr("class", (f) => `country ${byNum.has(f.id) ? "data" : "nodata"}`)
       .attr("fill", (f) => (byNum.has(f.id) ? divergingColor(byNum.get(f.id).flowScore) : null))
       .on("mousemove", (e, f) => { const d = byNum.get(f.id); if (d) showTip(e, instTip(d)); })
+      .on("click", (_, f) => { const d = byNum.get(f.id); if (d?.tv) openChart(d.tv.ticker, d.name); })
       .on("mouseleave", hideTip);
     // Marcadores para mercados demasiado pequeños para verse a esta escala.
     const small = [["HKG", [114.17, 22.3]], ["SGP", [103.82, 1.35]], ["ISR", [34.85, 31.05]], ["TWN", [121, 23.7]]];
@@ -272,6 +286,90 @@
     $("#narrative").innerHTML = snap.narrative.map((s) => `<li>${esc(s)}</li>`).join("");
   }
 
+  /* ---------- TradingView ---------- */
+  let unusualTab = "us";
+  function renderTradingView() {
+    const tv = snap.tradingview;
+    const card = $("#tvSection");
+    if (!tv) { card.hidden = true; return; }
+    card.hidden = false;
+    const breadth = (tv.sectorBreadth ?? []).map((b) => ({ ...b, name: b.sector, flowScore: b.flowRatio * 100 }));
+    barChart("#breadthChart", breadth, {
+      onClick: null,
+      tipFn: (b) => `<div class="t">${esc(b.sector)}</div>` + kv("Flujo neto intradía", fmtUsd(b.netFlowUsd)) +
+        kv("Valor negociado", fmtUsd(b.valueTradedUsd)) + kv("Acciones al alza", `${b.advancingPct.toFixed(0)}% de ${b.stocks}`) +
+        kv("Ratio de flujo", `${(b.flowRatio * 100).toFixed(0)}`),
+    });
+    $("#unusualTabs").innerHTML = [["us", "EE.UU."], ["crypto", "Cripto"]]
+      .map(([k, v]) => `<button role="tab" data-u="${k}" aria-selected="${k === unusualTab}">${v}</button>`).join("");
+    const list = unusualTab === "us" ? tv.unusualVolume : tv.cryptoUnusual;
+    const relHead = unusualTab === "us" ? "Vol. rel. 10d" : "Vol. vs 24h ant.";
+    $("#unusual").innerHTML = list?.length
+      ? `<table><thead><tr><th>Activo</th><th class="r">Cambio</th><th class="r">${relHead}</th><th class="r">Negociado</th><th>Técnico</th></tr></thead><tbody>` +
+        list.map((u) => `<tr class="clickable" data-tv="${esc(u.ticker)}" data-name="${esc(u.description || u.name)}">
+          <td><b>${esc(u.name)}</b> <span class="muted">${esc((u.description || "").slice(0, 28))}</span></td>
+          <td class="r num ${cls(u.change)}">${fmtPct(u.change)}</td>
+          <td class="r num">${u.relVolume10d != null ? u.relVolume10d.toFixed(1) + "×" : "—"}</td>
+          <td class="r num">${fmtUsd(u.valueTraded)}</td>
+          <td class="${cls(u.rating >= 0.1 ? 1 : u.rating <= -0.1 ? -1 : 0)}">${u.ratingLabel}</td></tr>`).join("") + "</tbody></table>"
+      : '<p class="muted">Sin datos en este momento (fuera de horario o sin volumen inusual).</p>';
+  }
+  $("#unusualTabs").addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-u]");
+    if (!b) return;
+    unusualTab = b.dataset.u;
+    renderTradingView();
+  });
+  document.addEventListener("click", (e) => {
+    const tr = e.target.closest("tr.clickable[data-tv]");
+    if (tr) openChart(tr.dataset.tv, tr.dataset.name);
+  });
+
+  /* Gráfico avanzado de TradingView (widget oficial gratuito) */
+  let chartSymbol = params.get("chart") || "AMEX:SPY";
+  let chartName = "S&P 500 (SPY)";
+  let tvLoading = null;
+  function loadTvJs() {
+    tvLoading ??= new Promise((resolve, reject) => {
+      const s = document.createElement("script");
+      s.src = "https://s3.tradingview.com/tv.js";
+      s.onload = resolve;
+      s.onerror = reject;
+      document.head.appendChild(s);
+    });
+    return tvLoading;
+  }
+  async function renderChart() {
+    $("#chartTitle").textContent = chartName;
+    try {
+      await loadTvJs();
+      $("#tvChart").innerHTML = "";
+      const dark = getComputedStyle(document.documentElement).colorScheme.includes("dark");
+      new window.TradingView.widget({
+        container_id: "tvChart",
+        symbol: chartSymbol,
+        interval: "D",
+        timezone: "Etc/UTC",
+        theme: dark ? "dark" : "light",
+        locale: "es",
+        autosize: true,
+        style: "1",
+        hide_side_toolbar: true,
+        allow_symbol_change: true,
+        studies: ["Volume@tv-basicstudies", "MFI@tv-basicstudies"],
+        backgroundColor: css("--surface"),
+      });
+    } catch {
+      $("#tvChart").innerHTML = '<p class="muted">No se pudo cargar el gráfico de TradingView.</p>';
+    }
+  }
+  function openChart(ticker, name) {
+    chartSymbol = ticker;
+    chartName = name || ticker;
+    renderChart();
+    $("#chartCard").scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
   function renderAll() {
     if (!snap) return;
     renderTiles();
@@ -282,6 +380,7 @@
     renderMap();
     renderLines();
     renderMacro();
+    renderTradingView();
     const t = new Date(snap.generatedAt);
     const mins = Math.round((Date.now() - t) / 60000);
     $("#updated").textContent = `Mercados: ${t.toLocaleTimeString("es", { hour: "2-digit", minute: "2-digit" })} (hace ${mins} min)`;
@@ -360,6 +459,7 @@
 
   renderTicker();
   loadSnapshot().then(liveCryptoGlobal);
+  renderChart();
   connectWs();
   setInterval(loadSnapshot, REFRESH_MS);
   setInterval(liveCryptoGlobal, REFRESH_MS);

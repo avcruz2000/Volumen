@@ -1,11 +1,12 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { computeFlow } from "./core/analytics.js";
+import { blendTradingView, computeFlow } from "./core/analytics.js";
 import { cryptoGlobal, fearGreed, stablecoinSupply, yahooSeries } from "./core/sources.js";
 import { buildLiquidity, buildSnapshot, computeRegime, fedLiquidity, type InstrumentFlow } from "./core/snapshot.js";
+import { TV_MARKETS, tvQuotes, tvSectorBreadth, tvUnusualVolume } from "./core/tradingview.js";
 import { GROUP_LABELS, UNIVERSE } from "./core/universe.js";
 
-export const VERSION = "1.0.0";
+export const VERSION = "1.1.0";
 
 const json = (data: unknown) => ({ content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] });
 const fail = (e: unknown) => ({ isError: true, content: [{ type: "text" as const, text: `Error: ${(e as Error).message}` }] });
@@ -22,7 +23,23 @@ const compact = (i: InstrumentFlow) => ({
   flujo_neto_5d_usd: Math.round(i.netFlow5d),
   puntuacion_flujo: i.flowScore,
   señal: i.signal,
+  ...(i.tv && {
+    tradingview: {
+      ticker: i.tv.ticker,
+      calificacion: round(i.tv.rating ?? undefined, 3),
+      recomendacion: i.tv.ratingLabel,
+      rsi: round(i.tv.rsi ?? undefined, 1),
+      volumen_relativo_10d: round(i.tv.relVolume10d ?? undefined),
+      confirma_flujo: i.tvConfirms ?? null,
+    },
+  }),
 });
+
+/** Flujo de un símbolo con Yahoo (volumen) + TradingView (técnico). */
+async function flowFor(sym: string) {
+  const [series, tv] = await Promise.all([yahooSeries(sym), tvQuotes([sym]).catch(() => new Map())]);
+  return { series, flow: blendTradingView(computeFlow(series), tv.get(sym)) };
+}
 
 function round(x: number | undefined, d = 2) {
   return x == null || !isFinite(x) ? null : Math.round(x * 10 ** d) / 10 ** d;
@@ -35,7 +52,8 @@ export function createServer(): McpServer {
       instructions:
         "Volumen analiza en tiempo casi real hacia dónde se mueve la liquidez global: flujos de dinero por clase de activo, " +
         "región, sector y cripto (volumen en USD, Chaikin Money Flow, volumen relativo), régimen risk-on/risk-off, " +
-        "liquidez neta de la Reserva Federal, M2, oferta de stablecoins y sentimiento. Empieza por get_liquidity_overview.",
+        "liquidez neta de la Reserva Federal, M2, oferta de stablecoins y sentimiento, más análisis técnico, volumen inusual y " +
+        "amplitud sectorial de TradingView. Empieza por get_liquidity_overview.",
     },
   );
 
@@ -57,6 +75,11 @@ export function createServer(): McpServer {
           regimen: s.regime,
           top_entradas: s.topInflows.map(compact),
           top_salidas: s.topOutflows.map(compact),
+          tradingview: s.tradingview && {
+            volumen_inusual_eeuu: s.tradingview.unusualVolume.slice(0, 10),
+            volumen_cripto: s.tradingview.cryptoUnusual.slice(0, 10),
+            amplitud_sectorial: s.tradingview.sectorBreadth,
+          },
           liquidez: {
             fed: s.liquidity.fed && { ...s.liquidity.fed, series: undefined },
             m2: s.liquidity.m2,
@@ -109,8 +132,7 @@ export function createServer(): McpServer {
     async ({ symbol }) => {
       try {
         const sym = symbol.trim().toUpperCase();
-        const series = await yahooSeries(sym);
-        const f = computeFlow(series);
+        const { series, flow: f } = await flowFor(sym);
         const inst = UNIVERSE.find((i) => i.symbol === sym);
         return json({
           ...compact({ ...f, name: inst?.name ?? sym, group: inst?.group ?? "asset" }),
@@ -145,7 +167,7 @@ export function createServer(): McpServer {
       const results = await Promise.allSettled(
         symbols.map(async (s) => {
           const sym = s.trim().toUpperCase();
-          const f = computeFlow(await yahooSeries(sym));
+          const { flow: f } = await flowFor(sym);
           return compact({ ...f, name: UNIVERSE.find((i) => i.symbol === sym)?.name ?? sym, group: "asset" });
         }),
       );
@@ -219,6 +241,95 @@ export function createServer(): McpServer {
     },
   );
 
+  server.registerTool(
+    "tradingview_technicals",
+    {
+      title: "Análisis técnico de TradingView",
+      description:
+        "Calificación técnica de TradingView (−1 venta fuerte … +1 compra fuerte; medias móviles y osciladores), RSI, volumen " +
+        "relativo 10d, valor negociado y rendimiento semanal/mensual. Acepta símbolos de EE.UU. (SPY, AAPL), de Yahoo " +
+        "(BTC-USD, ^VIX, EURUSD=X, GC=F) o de TradingView con bolsa (BMV:WALMEX, BINANCE:SOLUSDT, TVC:DXY).",
+      inputSchema: { symbols: z.array(z.string()).min(1).max(50).describe("Símbolos a consultar") },
+      annotations: { readOnlyHint: true, openWorldHint: true },
+    },
+    async ({ symbols }) => {
+      try {
+        const tv = await tvQuotes(symbols);
+        return json({
+          resultados: symbols.map((s) => {
+            const t = tv.get(s);
+            if (!t) return { simbolo: s, error: "No encontrado en TradingView" };
+            return {
+              simbolo: s,
+              ticker: t.ticker,
+              precio: t.close,
+              "cambio_dia_%": round(t.change ?? undefined),
+              calificacion: round(t.rating ?? undefined, 3),
+              recomendacion: t.ratingLabel,
+              medias_moviles: round(t.ratingMA ?? undefined, 3),
+              osciladores: round(t.ratingOsc ?? undefined, 3),
+              rsi: round(t.rsi ?? undefined, 1),
+              volumen_relativo_10d: round(t.relVolume10d ?? undefined),
+              valor_negociado_usd: t.valueTraded,
+              "rend_semana_%": round(t.perfW ?? undefined),
+              "rend_mes_%": round(t.perf1M ?? undefined),
+            };
+          }),
+        });
+      } catch (e) {
+        return fail(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    "tradingview_unusual_volume",
+    {
+      title: "Volumen inusual (TradingView)",
+      description:
+        "Screener de TradingView: activos con el volumen relativo más alto ahora mismo y liquidez suficiente — dónde está " +
+        "entrando dinero nuevo. Mercados: america, crypto, mexico, brazil, argentina, chile, colombia, peru, uk, germany, " +
+        "france, spain, japan, china, hongkong, india, korea, taiwan, canada, australia, etc.",
+      inputSchema: {
+        market: z.enum(TV_MARKETS).default("america").describe("Mercado de TradingView"),
+        limit: z.number().int().min(5).max(50).default(20),
+        min_value_traded: z.number().min(0).default(20_000_000).describe("Valor negociado mínimo de la sesión (moneda local)"),
+      },
+      annotations: { readOnlyHint: true, openWorldHint: true },
+    },
+    async ({ market, limit, min_value_traded }) => {
+      try {
+        const rows = await tvUnusualVolume(market, limit, min_value_traded);
+        return json({
+          mercado: market,
+          nota: market === "crypto" ? "volumen_relativo = volumen 24h / 24h previas (todos los exchanges)" : "volumen_relativo = sesión / media 10 sesiones",
+          resultados: rows,
+        });
+      } catch (e) {
+        return fail(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    "tradingview_sector_breadth",
+    {
+      title: "Amplitud y flujo sectorial intradía (TradingView)",
+      description:
+        "Recorre todas las acciones de EE.UU. con capitalización > 10.000 M y calcula por sector: % de acciones al alza, " +
+        "valor negociado y flujo neto intradía (valor negociado con el signo del movimiento). Medida bottom-up independiente de los ETFs.",
+      inputSchema: { min_market_cap: z.number().min(0).default(10_000_000_000) },
+      annotations: { readOnlyHint: true, openWorldHint: true },
+    },
+    async ({ min_market_cap }) => {
+      try {
+        return json({ sectores: await tvSectorBreadth(min_market_cap) });
+      } catch (e) {
+        return fail(e);
+      }
+    },
+  );
+
   server.registerResource(
     "snapshot",
     "volumen://snapshot",
@@ -240,7 +351,7 @@ export function createServer(): McpServer {
             type: "text",
             text:
               "Usa las herramientas de Volumen (get_liquidity_overview, get_capital_flows para 'asset', 'region' y 'sector', " +
-              "get_fed_liquidity y get_crypto_liquidity) y redacta un informe claro en español: régimen de mercado, hacia dónde " +
+              "get_fed_liquidity, get_crypto_liquidity, tradingview_unusual_volume y tradingview_sector_breadth) y redacta un informe claro en español: régimen de mercado, hacia dónde " +
               "fluye el dinero y de dónde sale, rotación geográfica y sectorial, contexto de liquidez de bancos centrales y cripto, " +
               "y los riesgos a vigilar. No es asesoramiento financiero.",
           },

@@ -1,6 +1,7 @@
-import { change, changePct, computeFlow, type FlowMetrics } from "./analytics.js";
+import { blendTradingView, change, changePct, computeFlow, type FlowMetrics } from "./analytics.js";
 import { cached, mapLimit } from "./http.js";
 import { cryptoGlobal, fearGreed, fredSeries, stablecoinSupply, yahooSeries, type CryptoGlobal, type Point } from "./sources.js";
+import { tvQuotes, tvSectorBreadth, tvUnusualVolume, type SectorBreadth, type UnusualVolume } from "./tradingview.js";
 import { GROUP_LABELS, UNIVERSE, uniqueSymbols, type Group, type Instrument } from "./universe.js";
 
 export type InstrumentFlow = FlowMetrics & Pick<Instrument, "name" | "group" | "risk" | "country">;
@@ -46,6 +47,7 @@ export interface Snapshot {
   groupLabels: Record<Group, string>;
   topInflows: InstrumentFlow[];
   topOutflows: InstrumentFlow[];
+  tradingview?: { unusualVolume: UnusualVolume[]; cryptoUnusual: UnusualVolume[]; sectorBreadth: SectorBreadth[] };
   narrative: string[];
   errors: string[];
 }
@@ -64,6 +66,15 @@ export async function fetchFlows(symbols: string[], errors: string[] = []): Prom
       errors.push(`${sym}: ${(e as Error).message}`);
     }
   });
+  // TradingView como segunda fuente: calificación técnica + volumen intradía.
+  try {
+    const tv = await tvQuotes(symbols);
+    for (const [sym, f] of out) out.set(sym, blendTradingView(f, tv.get(sym)));
+    const missing = symbols.filter((s) => out.has(s) && !tv.has(s));
+    if (missing.length) errors.push(`TradingView sin datos para: ${missing.join(", ")}`);
+  } catch (e) {
+    errors.push(`TradingView: ${(e as Error).message}`);
+  }
   return out;
 }
 
@@ -210,6 +221,15 @@ export function buildNarrative(s: Omit<Snapshot, "narrative">): string[] {
   }
   const c = s.liquidity.crypto;
   if (c) out.push(`Cripto: capitalización ${usd(c.totalMarketCapUsd)} (${c.marketCapChange24hPct >= 0 ? "+" : ""}${c.marketCapChange24hPct.toFixed(2)}% 24h), dominancia BTC ${c.btcDominance.toFixed(1)}%.`);
+  const tv = s.tradingview;
+  if (tv?.sectorBreadth.length) {
+    const b = tv.sectorBreadth;
+    const fmt = (x: SectorBreadth) => `${x.sector} (${x.advancingPct.toFixed(0)}% al alza)`;
+    out.push(`TradingView, amplitud intradía de grandes empresas EE.UU. — dinero entrando en: ${b.slice(0, 3).map(fmt).join(", ")}; saliendo de: ${b.slice(-3).reverse().map(fmt).join(", ")}.`);
+  }
+  if (tv?.unusualVolume.length) {
+    out.push(`Volumen inusual ahora (TradingView): ${tv.unusualVolume.slice(0, 5).map((u) => `${u.name} ${u.relVolume10d?.toFixed(1)}× (${(u.change ?? 0) >= 0 ? "+" : ""}${(u.change ?? 0).toFixed(1)}%)`).join(", ")}.`);
+  }
   if (r.components.vix != null) out.push(`VIX en ${r.components.vix.toFixed(1)}${r.components.vix > 25 ? " — estrés elevado" : r.components.vix < 15 ? " — complacencia" : ""}.`);
   return out;
 }
@@ -217,7 +237,18 @@ export function buildNarrative(s: Omit<Snapshot, "narrative">): string[] {
 export async function buildSnapshot(): Promise<Snapshot> {
   return cached("snapshot", 60_000, async () => {
     const errors: string[] = [];
-    const [flows, liquidity] = await Promise.all([fetchFlows(uniqueSymbols(), errors), buildLiquidity(errors)]);
+    const safe = <T>(label: string, p: Promise<T>) =>
+      p.catch((e) => {
+        errors.push(`${label}: ${(e as Error).message}`);
+        return [] as unknown as T;
+      });
+    const [flows, liquidity, unusualVolume, cryptoUnusual, sectorBreadth] = await Promise.all([
+      fetchFlows(uniqueSymbols(), errors),
+      buildLiquidity(errors),
+      safe("TradingView volumen inusual", tvUnusualVolume("america", 15)),
+      safe("TradingView cripto", tvUnusualVolume("crypto", 10)),
+      safe("TradingView amplitud sectorial", tvSectorBreadth()),
+    ]);
     const groups = buildGroups(flows);
     const regime = computeRegime(groups);
     const seen = new Set<string>();
@@ -236,6 +267,7 @@ export async function buildSnapshot(): Promise<Snapshot> {
       groupLabels: GROUP_LABELS,
       topInflows: sorted.filter((i) => i.flowScore > 0).slice(0, 10),
       topOutflows: sorted.filter((i) => i.flowScore < 0).reverse().slice(0, 10),
+      tradingview: { unusualVolume, cryptoUnusual, sectorBreadth },
       errors,
     };
     return { ...base, narrative: buildNarrative(base) };
