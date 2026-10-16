@@ -3,3 +3,4 @@ dist/
 site/data/*.json
 .DS_Store
 .claude/
+site/data/history/
