@@ -3,10 +3,11 @@ import { z } from "zod";
 import { blendTradingView, computeFlow } from "./core/analytics.js";
 import { cryptoGlobal, fearGreed, stablecoinSupply, yahooSeries } from "./core/sources.js";
 import { buildLiquidity, buildSnapshot, computeRegime, fedLiquidity, type InstrumentFlow } from "./core/snapshot.js";
+import { buildGroupHistory, buildMacroHistory, intensity, regimeHistory } from "./core/history.js";
 import { TV_MARKETS, tvQuotes, tvSectorBreadth, tvUnusualVolume } from "./core/tradingview.js";
 import { GROUP_LABELS, UNIVERSE } from "./core/universe.js";
 
-export const VERSION = "1.1.0";
+export const VERSION = "1.2.0";
 
 const json = (data: unknown) => ({ content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] });
 const fail = (e: unknown) => ({ isError: true, content: [{ type: "text" as const, text: `Error: ${(e as Error).message}` }] });
@@ -324,6 +325,130 @@ export function createServer(): McpServer {
     async ({ min_market_cap }) => {
       try {
         return json({ sectores: await tvSectorBreadth(min_market_cap) });
+      } catch (e) {
+        return fail(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    "get_flow_history",
+    {
+      title: "Historial de flujos de liquidez",
+      description:
+        "Historial de flujo de dinero por periodo (mensual desde 1993 o semanal 10 años) para un grupo ('asset', 'region', " +
+        "'sector', 'crypto') o para símbolos concretos del universo. Por periodo: rendimiento %, volumen en USD, flujo neto en " +
+        "USD e intensidad (flujo/volumen ×100, comparable en el tiempo). Incluye el flujo acumulado del rango pedido.",
+      inputSchema: {
+        group: z.enum(["asset", "region", "sector", "crypto"]).describe("Grupo"),
+        symbols: z.array(z.string()).optional().describe("Limitar a estos símbolos del grupo (p.ej. ['XLK','XLE'])"),
+        resolution: z.enum(["monthly", "weekly"]).default("monthly"),
+        periods: z.number().int().min(1).max(500).default(24).describe("Número de periodos más recientes a devolver"),
+      },
+      annotations: { readOnlyHint: true, openWorldHint: true },
+    },
+    async ({ group, symbols, resolution, periods }) => {
+      try {
+        const syms = symbols?.map((s) => s.trim().toUpperCase());
+        const h = await buildGroupHistory(group, resolution, { symbols: syms, maxPeriods: resolution === "weekly" ? 520 : undefined });
+        const from = Math.max(0, h.periods.length - periods);
+        const range = h.periods.slice(from);
+        return json({
+          grupo: h.label,
+          resolucion: resolution === "monthly" ? "mensual" : "semanal",
+          unidades: { volumen_usd_m: "millones USD", flujo_neto_usd_m: "millones USD", intensidad: "−100…+100" },
+          series: h.series.map((s) => {
+            const rows = range.map((p, k) => {
+              const i = from + k;
+              return { periodo: p, "rend_%": s.ret[i], volumen_usd_m: s.dv[i], flujo_neto_usd_m: s.nf[i], intensidad: round(intensity(s.nf[i], s.dv[i]) ?? undefined, 1) };
+            });
+            const acumulado = rows.reduce((a, r) => a + (r.flujo_neto_usd_m ?? 0), 0);
+            return { simbolo: s.symbol, nombre: s.name, historial_desde: s.start, flujo_acumulado_usd_m: Math.round(acumulado), periodos: rows };
+          }),
+        });
+      } catch (e) {
+        return fail(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    "get_rotation_history",
+    {
+      title: "Historial de rotación de liquidez",
+      description:
+        "Para cada periodo (mes o semana), qué instrumentos de un grupo recibieron más dinero y cuáles perdieron más, por " +
+        "intensidad de flujo. Sirve para ver cómo ha rotado la liquidez entre países, sectores o clases de activo a lo largo del tiempo.",
+      inputSchema: {
+        group: z.enum(["asset", "region", "sector", "crypto"]),
+        resolution: z.enum(["monthly", "weekly"]).default("monthly"),
+        periods: z.number().int().min(1).max(400).default(12),
+        top: z.number().int().min(1).max(10).default(3),
+      },
+      annotations: { readOnlyHint: true, openWorldHint: true },
+    },
+    async ({ group, resolution, periods, top }) => {
+      try {
+        const h = await buildGroupHistory(group, resolution, { maxPeriods: resolution === "weekly" ? 520 : undefined });
+        const from = Math.max(0, h.periods.length - periods);
+        const out = h.periods.slice(from).map((p, k) => {
+          const i = from + k;
+          const ranked = h.series
+            .map((s) => ({ nombre: s.name, simbolo: s.symbol, intensidad: intensity(s.nf[i], s.dv[i]), flujo_usd_m: s.nf[i], "rend_%": s.ret[i] }))
+            .filter((x) => x.intensidad != null)
+            .sort((a, b) => b.intensidad! - a.intensidad!)
+            .map((x) => ({ ...x, intensidad: round(x.intensidad!, 1) }));
+          return { periodo: p, entradas: ranked.slice(0, top), salidas: ranked.slice(-top).reverse() };
+        });
+        return json({ grupo: h.label, resolucion: resolution, rotacion: out.reverse() });
+      } catch (e) {
+        return fail(e);
+      }
+    },
+  );
+
+  server.registerTool(
+    "get_macro_liquidity_history",
+    {
+      title: "Historial de liquidez macro",
+      description:
+        "Series largas de liquidez: liquidez neta de la Fed (semanal desde 2002), balance de la Fed, M2 (mensual desde 1959), " +
+        "stablecoins (desde 2017), miedo y codicia cripto (desde 2018), VIX (desde 1990) y régimen histórico risk-on/off de flujos (desde 1998).",
+      inputSchema: {
+        since: z.string().regex(/^\d{4}(-\d{2})?(-\d{2})?$/).default("2015").describe("Fecha inicial YYYY, YYYY-MM o YYYY-MM-DD"),
+        step: z.enum(["all", "monthly", "quarterly", "yearly"]).default("monthly").describe("Muestreo para reducir puntos"),
+      },
+      annotations: { readOnlyHint: true, openWorldHint: true },
+    },
+    async ({ since, step }) => {
+      try {
+        const [macro, asset, sector] = await Promise.all([
+          buildMacroHistory(),
+          buildGroupHistory("asset", "monthly"),
+          buildGroupHistory("sector", "monthly"),
+        ]);
+        const reg = regimeHistory(asset, sector);
+        const keyLen = step === "yearly" ? 4 : step === "all" ? 99 : 7;
+        const sample = (pts: { date: string; value: number | null }[]) => {
+          const m = new Map<string, { date: string; value: number | null }>();
+          for (const p of pts) {
+            if (p.date < since) continue;
+            let k = p.date.slice(0, keyLen);
+            if (step === "quarterly") k = `${p.date.slice(0, 4)}-Q${Math.floor((Number(p.date.slice(5, 7)) - 1) / 3) + 1}`;
+            m.set(k, p);
+          }
+          return [...m.values()];
+        };
+        return json({
+          liquidez_neta_fed_mm: sample(macro.fedNetLiquidity),
+          balance_fed_mm: sample(macro.fedBalanceSheet),
+          m2_mm: sample(macro.m2),
+          stablecoins_mm: sample(macro.stablecoins),
+          miedo_codicia: sample(macro.fearGreed),
+          vix: sample(macro.vix),
+          regimen_flujos: sample(reg.periods.map((p, i) => ({ date: p, value: reg.values[i] }))),
+          unidades: "mm = miles de millones USD",
+        });
       } catch (e) {
         return fail(e);
       }

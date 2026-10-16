@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Volumen — Historial de flujos</title>
+  <meta name="description" content="Historial de flujos de liquidez por mercados, países y sectores desde 1993." />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%232a78d6'/><rect x='6' y='16' width='4' height='10' rx='1' fill='white'/><rect x='14' y='9' width='4' height='17' rx='1' fill='white'/><rect x='22' y='5' width='4' height='21' rx='1' fill='white'/></svg>" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="7" fill="var(--accent)"/><rect x="6" y="16" width="4" height="10" rx="1" fill="#fff"/><rect x="14" y="9" width="4" height="17" rx="1" fill="#fff"/><rect x="22" y="5" width="4" height="21" rx="1" fill="#fff"/></svg>
+      <div>
+        <h1>Volumen</h1>
+        <p class="sub">Historial de flujos de liquidez</p>
+      </div>
+    </div>
+    <nav class="nav"><a href="./">Ahora</a><a href="historia.html" aria-current="page">Historial</a></nav>
+    <div class="status">
+      <span class="muted" id="updated">—</span>
+      <button class="icon-btn" id="themeBtn" aria-label="Cambiar tema" title="Cambiar tema">◐</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="card">
+      <div class="toolbar">
+        <div><label>Mercado</label><div class="seg" role="tablist" id="groupSeg"></div></div>
+        <div><label>Resolución</label><div class="seg" role="tablist" id="resSeg"></div></div>
+        <div><label>Periodo</label><div class="seg" role="tablist" id="rangeSeg"></div></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="card-head wrap">
+        <h2>Mapa de calor de flujos</h2>
+        <div class="legend-div" aria-hidden="true"><span>Salida</span><i class="ramp"></i><span>Entrada</span></div>
+      </div>
+      <p class="hint" style="margin:-4px 0 10px">Intensidad de flujo de cada periodo = flujo neto ÷ volumen negociado. Filas ordenadas por intensidad media del periodo elegido. Clic en una fila para añadirla al gráfico.</p>
+      <div class="heat" id="heat"><canvas id="heatCanvas"></canvas></div>
+    </section>
+
+    <section class="card">
+      <div class="card-head wrap">
+        <h2>Flujo acumulado</h2>
+        <div class="controls">
+          <div class="seg" role="tablist" id="cumSeg"></div>
+        </div>
+      </div>
+      <div id="chips" class="legend"></div>
+      <div id="cumChart" class="chart line"></div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h2>Ranking del periodo</h2>
+        <span class="hint" id="rankHint"></span>
+      </div>
+      <div id="rank" class="table-wrap"></div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h2>Régimen histórico: riesgo vs refugio</h2>
+        <span class="hint">Intensidad media en activos de riesgo − refugio · mensual desde 1998</span>
+      </div>
+      <div id="regimeChart" class="chart"></div>
+    </section>
+
+    <section class="card">
+      <div class="card-head">
+        <h2>Contexto de liquidez macro</h2>
+        <span class="hint">Mismo periodo que el selector</span>
+      </div>
+      <div class="multiples">
+        <div><h3>Liquidez neta de la Fed</h3><span class="hint">Balance − TGA − RRP · billones USD · desde 2002</span><div id="mFed" class="chart line"></div></div>
+        <div><h3>Masa monetaria M2 (variación interanual)</h3><span class="hint">% · desde 1960</span><div id="mM2" class="chart line"></div></div>
+        <div><h3>Oferta de stablecoins</h3><span class="hint">Mil M USD · desde 2017</span><div id="mStable" class="chart line"></div></div>
+        <div><h3>VIX</h3><span class="hint">Cierre mensual · desde 1990</span><div id="mVix" class="chart line"></div></div>
+      </div>
+    </section>
+
+    <section class="card about">
+      <h2>Sobre los datos</h2>
+      <p>El historial se calcula con los datos diarios completos de Yahoo Finance de cada ETF o activo (S&amp;P 500 desde 1993, países desde 1996, sectores desde 1998, Bitcoin desde 2014) y se agrega por mes o por semana. En cada día, el volumen en USD se multiplica por la posición del cierre dentro del rango del día (+1 en el máximo, −1 en el mínimo): la suma es el <b>flujo neto</b>. La <b>intensidad</b> divide ese flujo por el volumen total del periodo, lo que permite comparar épocas y activos de distinto tamaño. Macro: FRED (Reserva Federal), DefiLlama y Yahoo. Se recalcula una vez al día.</p>
+      <p class="muted small">Es una estimación del flujo a partir del precio y el volumen, no de las suscripciones/reembolsos reales de los ETFs. Información educativa, no es asesoramiento financiero.</p>
+    </section>
+  </main>
+
+  <div class="tooltip" id="tip" role="tooltip" hidden></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js"></script>
+  <script src="historia.js"></script>
+</body>
+</html>

@@ -1,14 +1,15 @@
 {
   "name": "volumen-mcp",
-  "version": "1.1.0",
-  "description": "MCP que analiza en tiempo real hacia dónde fluye la liquidez de los mercados mundiales",
+  "version": "1.2.0",
+  "description": "MCP que analiza en tiempo real hacia d\u00f3nde fluye la liquidez de los mercados mundiales",
   "main": "dist/src/index.js",
   "scripts": {
     "build": "tsc",
     "start": "node dist/src/index.js",
     "start:http": "node dist/src/index.js --http",
     "snapshot": "node dist/scripts/build-snapshot.js",
-    "dev": "tsc && node dist/src/index.js --http"
+    "dev": "tsc && node dist/src/index.js --http",
+    "history": "node dist/scripts/build-history.js"
   },
   "keywords": [
     "mcp",

@@ -3,6 +3,7 @@
 **Servidor MCP que analiza hacia dónde se mueve la liquidez de los mercados mundiales, en tiempo casi real.**
 
 📊 **Dashboard en vivo:** https://avcruz2000.github.io/Volumen/
+🕰️ **Historial de flujos (desde 1993):** https://avcruz2000.github.io/Volumen/historia.html
 
 Volumen mide el flujo de dinero entrando y saliendo de clases de activo, países, sectores y cripto
 a partir del **volumen negociado en USD**, y lo combina con la liquidez de los bancos centrales y del
@@ -24,6 +25,25 @@ ecosistema cripto para responder una pregunta: *¿hacia dónde está yendo el di
 | **Volumen inusual** | Activos con volumen relativo anómalo ahora mismo (EE.UU., cripto y 24 mercados locales) | TradingView |
 | **Amplitud sectorial** | Flujo neto intradía y % al alza por sector, recorriendo todas las acciones de EE.UU. > 10.000 M | TradingView |
 | **En vivo (dashboard)** | Precios cripto tick a tick · gráfico interactivo de TradingView | Coinbase WebSocket · TradingView |
+
+### Historial
+
+| Serie | Desde | Resolución |
+|---|---|---|
+| Flujos por clase de activo (S&P 500, bonos, oro…) | 1993 | mensual · semanal (10 años) |
+| Flujos por país (30 ETFs) | 1996 | mensual · semanal (10 años) |
+| Flujos por sector EE.UU. | 1998 | mensual · semanal (10 años) |
+| Flujos cripto | 2014 | mensual · semanal |
+| Régimen riesgo vs refugio | 1998 | mensual |
+| Liquidez neta de la Fed | 2002 | semanal |
+| Masa monetaria M2 | 1959 | mensual |
+| VIX | 1990 | mensual |
+| Stablecoins | 2017 | semanal |
+| Miedo y codicia cripto | 2018 | semanal |
+
+La página de historial muestra un **mapa de calor** de intensidad de flujo (instrumento × periodo), el **flujo
+acumulado** de hasta 4 instrumentos (en USD o normalizado), un **ranking** del periodo elegido, el **régimen
+histórico** y el contexto macro. Se recalcula una vez al día en GitHub Actions.
 
 Todas las fuentes son **públicas y gratuitas, sin API keys**. TradingView se consulta mediante su scanner público (no oficial): puede cambiar sin aviso, por eso Volumen sigue funcionando aunque falle.
 
@@ -124,6 +144,9 @@ como conector remoto en Claude.
 | `get_crypto_liquidity` | Capitalización, dominancia, stablecoins, miedo y codicia |
 | `tradingview_technicals` | Calificación técnica, RSI, volumen relativo y rendimiento de cualquier símbolo (SPY, BTC-USD, BMV:WALMEX, TVC:DXY…) |
 | `tradingview_unusual_volume` | Screener de volumen inusual en EE.UU., cripto o mercados locales (México, Brasil, Japón, India…) |
+| `get_flow_history` | Historial de flujos (mensual desde 1993 o semanal) de un grupo o de símbolos concretos |
+| `get_rotation_history` | Qué entró y qué salió en cada mes/semana: cómo ha rotado la liquidez |
+| `get_macro_liquidity_history` | Fed, M2, stablecoins, VIX, miedo y codicia y régimen histórico |
 | `tradingview_sector_breadth` | Flujo neto intradía y amplitud por sector con todas las grandes acciones de EE.UU. |
 
 Recurso: `volumen://snapshot` · Prompt: `informe_liquidez`.
@@ -135,12 +158,15 @@ Ejemplos de preguntas a Claude:
 - *"¿La Fed está inyectando o drenando liquidez?"*
 - *"¿Qué acciones mexicanas tienen volumen inusual hoy?"*
 - *"¿TradingView confirma el flujo hacia el oro?"*
+- *"¿Cómo ha rotado la liquidez entre sectores en los últimos 12 meses?"*
+- *"¿Qué países han acumulado más flujo desde 2010?"*
 
 ## Desarrollo
 
 ```bash
 npm run build       # compila TypeScript
 npm run snapshot    # genera site/data/*.json con datos reales
+npm run history     # genera site/data/history/*.json (historial completo)
 python3 -m http.server 8765 --directory site   # ver el dashboard en local
 ```
 

@@ -32,6 +32,11 @@ jobs:
         run: npm run snapshot
         env:
           PUBLISHED_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}
+      - name: Historial de flujos (se recalcula una vez al día)
+        run: npm run history
+        env:
+          PUBLISHED_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}
+          HISTORY_FORCE: ${{ github.event_name == 'workflow_dispatch' && '1' || '0' }}
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
